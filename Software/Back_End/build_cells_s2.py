@@ -116,8 +116,7 @@ def main():
             f"Missing dependency: {e.name}. This build needs your GDAL/vgridpandas "
             f"environment:\n"
             f"    conda install -c conda-forge gdal geopandas\n"
-            f"    pip install vgridpandas\n"
-            f"(Or run build_cells_s2sphere.py, which needs no GDAL.)"
+            f"    pip install vgridpandas"
         )
 
     if not os.path.exists(POINTS_JSON):
