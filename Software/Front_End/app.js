@@ -37,6 +37,20 @@
     ["historicalComparison", "Historical"],
   ];
 
+  // Basin builds tag features with basin_id; grid builds don't. Label accordingly.
+  function unitLabel(props) {
+    return props && props.basin_id ? "Basin" : "Cell";
+  }
+
+  // Compact counts for the impact tiles: 8_181_280 -> "8.2M".
+  function fmtCount(n) {
+    if (n === null || n === undefined || !isFinite(n)) return "—";
+    if (n >= 1e9) return (n / 1e9).toFixed(1).replace(/\.0$/, "") + "B";
+    if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+    if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, "") + "k";
+    return Math.round(n).toLocaleString();
+  }
+
   function fmtValue(key, val) {
     if (val === undefined || val === null || val === "") return "—";
     if (key === "returnPeriodYr") return val + "-year";
@@ -144,6 +158,29 @@
         </div>`;
     }).join("");
 
+    const imp = props.impact;
+    const tile = (icon, label, value, span) => `
+      <div class="${span ? "col-span-2 " : ""}rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
+        <div class="flex items-center gap-1 text-slate-400 text-[10px] font-semibold uppercase tracking-wide mb-1">
+          <iconify-icon icon="${icon}" class="text-[12px]"></iconify-icon>${label}
+        </div>
+        <div class="text-slate-800 font-bold text-[15px] leading-none">${value}</div>
+      </div>`;
+    const impactHtml = imp ? `
+      <div class="mt-4 pt-3 border-t border-slate-200">
+        <h3 class="flex items-center gap-1.5 text-slate-800 font-semibold text-[11px] uppercase tracking-wider mb-2">
+          <iconify-icon icon="heroicons:exclamation-triangle" class="text-amber-500 text-sm"></iconify-icon>Impact
+        </h3>
+        <div class="grid grid-cols-2 gap-2">
+          ${tile("heroicons:building-office-2", "Buildings", fmtCount(imp.buildings))}
+          ${tile("lucide:wheat", "Farmland", fmtCount(imp.farmland_m2 / 1e6) + " km²")}
+          ${tile("lucide:route", "Roads", fmtCount(imp.highway_km) + " km")}
+          ${tile("lucide:train-front", "Railways", fmtCount(imp.railway_km) + " km")}
+          ${tile("heroicons:users", "Population", fmtCount(imp.population), true)}
+        </div>
+        <p class="text-slate-400 text-[10px] mt-1.5">Totals across the whole basin.</p>
+      </div>` : "";
+
     const nModels = (props.models || []).length;
     const confidence = nModels >= 2
       ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800">
@@ -153,14 +190,15 @@
     panelContent.innerHTML = `
       <h2 class="flex items-center gap-2 text-slate-800 font-semibold text-[15px] mb-0.5">
         <iconify-icon icon="heroicons:squares-2x2" style="color:${worstColor}"></iconify-icon>
-        Cell ${props.cell_id}
+        ${unitLabel(props)} ${props.cell_id}
         ${badge(worst, worstColor)}
       </h2>
       <div class="flex items-center gap-2 mb-3.5">
         ${confidence}
         <span class="text-slate-500 text-xs">${props.model_count} forecast${props.model_count === 1 ? "" : "s"} · worst-case above</span>
       </div>
-      ${cards}`;
+      ${cards}
+      ${impactHtml}`;
   }
 
   let resolutions = [];
@@ -227,7 +265,7 @@
   function bindFeature(feature, lyr, getGroup) {
     const p = feature.properties;
     lyr.bindTooltip(
-      `Cell ${p.cell_id} · <b>${p.severity || "?"}</b> (${p.model_count} forecast${p.model_count === 1 ? "" : "s"})` +
+      `${unitLabel(p)} ${p.cell_id} · <b>${p.severity || "?"}</b> (${p.model_count} forecast${p.model_count === 1 ? "" : "s"})` +
       (p.agree ? ` · ✓ ${p.models.length} models` : ""),
       { sticky: true }
     );
@@ -359,6 +397,13 @@
         "<h2>No cell data</h2><p>Run <code>python csv_to_json_vgrid.py</code> then " +
         "<code>python build_cells_h3.py</code> to generate <code>data.geojson</code>.</p>";
       return;
+    }
+
+    if (/basin/i.test(geo.kind || "")) {
+      const h = document.querySelector("#panel-empty h2");
+      const p = document.querySelector("#panel-empty p");
+      if (h) h.textContent = "No basin selected";
+      if (p) p.textContent = "Click a highlighted basin on the map to see every forecast inside it.";
     }
 
     const models = new Set();
